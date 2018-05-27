@@ -133,10 +133,13 @@ def _render_column_type(coltype):
     return text
 
 
-def _render_column(column, show_name):
+def _render_column(column, show_name, has_fk=True):
     kwarg = []
     is_sole_pk = column.primary_key and len(column.table.primary_key) == 1
-    dedicated_fks = [c for c in column.foreign_keys if len(c.constraint.columns) == 1]
+    if has_fk is True:
+        dedicated_fks = [c for c in column.foreign_keys if len(c.constraint.columns) == 1]
+    else:
+        dedicated_fks = []
     is_unique = any(isinstance(c, UniqueConstraint) and set(c.columns) == set([column])
                     for c in column.table.constraints)
     is_unique = is_unique or any(i.unique and set(i.columns) == set([column]) for i in column.table.indexes)
@@ -160,14 +163,23 @@ def _render_column(column, show_name):
     if column.server_default:
         server_default = 'server_default=' + _flask_prepend + 'FetchedValue()'
 
+    # return _flask_prepend + 'Column({0})'.format(', '.join(
+    #     ([repr(column.name)] if show_name else []) +
+    #     ([_render_column_type(column.type)] if render_coltype else []) +
+    #     [_render_constraint(x) for x in dedicated_fks] +
+    #     [repr(x) for x in column.constraints] +
+    #     ['{0}={1}'.format(k, repr(getattr(column, k))) for k in kwarg] +
+    #     ([server_default] if column.server_default else [])
+    # ))
+
     return _flask_prepend + 'Column({0})'.format(', '.join(
-        ([repr(column.name)] if show_name else []) +
-        ([_render_column_type(column.type)] if render_coltype else []) +
-        [_render_constraint(x) for x in dedicated_fks] +
-        [repr(x) for x in column.constraints] +
-        ['{0}={1}'.format(k, repr(getattr(column, k))) for k in kwarg] +
-        ([server_default] if column.server_default else [])
-    ))
+            ([repr(column.name)] if show_name else []) +
+            ([_render_column_type(column.type)]) +
+            [_render_constraint(x) for x in dedicated_fks] +
+            [repr(x) for x in column.constraints] +
+            ['{0}={1}'.format(k, repr(getattr(column, k))) for k in kwarg] +
+            ([server_default] if column.server_default else [])
+        ))
 
 
 def _render_constraint(constraint):
@@ -278,6 +290,31 @@ class ModelTable(Model):
         super(ModelTable, self).add_imports(collector)
         collector.add_import(Table)
 
+    def render_no_relationship(self):
+
+        suffix = "_clone"
+        met = ' metadata,' if _flask_prepend == '' else ''
+        text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name + suffix, _flask_prepend, met)
+
+        for column in self.table.columns:
+            text += '    {0},\n'.format(_render_column(column, True, has_fk=False))
+
+        # for constraint in sorted(self.table.constraints, key=_get_constraint_sort_key):
+        #     if isinstance(constraint, PrimaryKeyConstraint):
+        #         continue
+        #     if isinstance(constraint, (ForeignKeyConstraint, UniqueConstraint)) and len(constraint.columns) == 1:
+        #         continue
+        #     text += '    {0},\n'.format(_render_constraint(constraint))
+
+        # for index in self.table.indexes:
+        #     if len(index.columns) > 1:
+        #         text += '    {0},\n'.format(_render_index(index))
+
+        if self.schema:
+            text += "    schema='{0}',\n".format(self.schema)
+
+        return text.rstrip('\n,') + '\n)'
+
     def render(self):
         met = ' metadata,' if _flask_prepend == '' else ''
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name, _flask_prepend, met)
@@ -358,6 +395,31 @@ class ModelClass(Model):
 
         for child in self.children:
             child.add_imports(collector)
+
+    def render_no_relationship(self):
+        suffix = "_clone"
+        text = 'class {0}({1}):\n'.format(self.name, self.parent_name + suffix)
+        text += '    __tablename__ = {0!r}\n'.format(self.table.name + suffix)
+
+        # Render columns
+        text += '\n'
+        for attr, column in self.attributes.items():
+            if isinstance(column, Column):
+                show_name = attr != column.name
+                text += '    {0} = {1}\n'.format(attr, _render_column(column, show_name, has_fk=False))
+
+        # Render relationships
+        if any(isinstance(value, Relationship) for value in self.attributes.values()):
+            text += '\n'
+        for attr, relationship in self.attributes.items():
+            if isinstance(relationship, Relationship):
+                text += '    {0} = {1}\n'.format(attr, relationship.render())
+
+        # Render subclasses
+        for child_class in self.children:
+            text += '\n\n' + child_class.render()
+
+        return text
 
     def render(self):
         text = 'class {0}({1}):\n'.format(self.name, self.parent_name)
@@ -654,7 +716,13 @@ class CodeGenerator(object):
         # Render the model tables and classes
         for model in self.models:
             print('\n\n', file=outfile)
-            print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
+            # print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
+            print(model.render(), file=outfile)
+            print(model.render_no_relationship(), file=outfile)
+
+
+        for model in self.models:
+            print(repr(model.table))
 
         if self.footer:
             print(self.footer, file=outfile)
