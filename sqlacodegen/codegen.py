@@ -289,6 +289,7 @@ class Model(object):
 class ModelTable(Model):
 
     suffix = "_clone"
+    _has_clone = []
 
     def add_imports(self, collector):
         super(ModelTable, self).add_imports(collector)
@@ -298,7 +299,8 @@ class ModelTable(Model):
         met = ' metadata,' if _flask_prepend == '' else ''
 
         # print(str(self.table.name), self.table.name.endswith(self.suffix))
-        if str(self.table.name).endswith(self.suffix) is True:
+        if str(self.table.name).endswith(self.suffix) is True \
+                or str(self.table.name) in self._has_clone:
             return "#"
 
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name + self.suffix, _flask_prepend, met)
@@ -324,6 +326,9 @@ class ModelTable(Model):
 
     def render(self):
         met = ' metadata,' if _flask_prepend == '' else ''
+
+        if str(self.table.name).endswith(self.suffix) is True:
+            self._has_clone.append(str(self.table.name)[:-len(self.suffix)])
 
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name, _flask_prepend, met)
 
@@ -806,16 +811,19 @@ class CodeGenerator(object):
 
 
     @staticmethod
-    def table_recursion(table_shcema, name, n=0):
-        if table_shcema[name]["relationship"] == {}:
+    def table_recursion(table_schema, name, n=0):
+        if table_schema[name]["relationship"] == {}:
             return n
 
-        rs = table_shcema[name]["relationship"].items()
+        rs = table_schema[name]["relationship"].items()
 
         ns = 0
         for k, v in rs:
             _name = v.split(".")[0]
-            c = abs(CodeGenerator.table_recursion(table_shcema, _name, n - 1))
+            if _name == name:
+                ns += 1
+                continue
+            c = abs(CodeGenerator.table_recursion(table_schema, _name, n - 1))
             ns += c
         return ns
 
@@ -839,6 +847,9 @@ class CodeGenerator(object):
             print('\n\n', file=outfile)
             # print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
             print(model.render(), file=outfile)
+
+        #Render the model tables no clone table
+        for model in self.models:
             print(model.render_no_relationship(), file=outfile)
 
         table_names = []
