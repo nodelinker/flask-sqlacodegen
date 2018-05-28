@@ -846,7 +846,7 @@ class CodeGenerator(object):
             table_names.append("t_{0}".format(model.table.name))
 
 
-        print("table_array = " + repr(table_names), file=outfile)
+        print("table_array = " + str(repr(table_names)).replace("'", ""), file=outfile)
 
         if self.footer:
             print(self.footer, file=outfile)
