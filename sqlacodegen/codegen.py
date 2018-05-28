@@ -6,6 +6,7 @@ from keyword import iskeyword
 import inspect
 import sys
 import re
+import json
 
 from sqlalchemy import (Enum, ForeignKeyConstraint, PrimaryKeyConstraint, CheckConstraint, UniqueConstraint, Table,
                         Column)
@@ -286,15 +287,21 @@ class Model(object):
 
 
 class ModelTable(Model):
+
+    suffix = "_clone"
+
     def add_imports(self, collector):
         super(ModelTable, self).add_imports(collector)
         collector.add_import(Table)
 
     def render_no_relationship(self):
-
-        suffix = "_clone"
         met = ' metadata,' if _flask_prepend == '' else ''
-        text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name + suffix, _flask_prepend, met)
+
+        # print(str(self.table.name), self.table.name.endswith(self.suffix))
+        if str(self.table.name).endswith(self.suffix) is True:
+            return "#"
+
+        text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name + self.suffix, _flask_prepend, met)
 
         for column in self.table.columns:
             text += '    {0},\n'.format(_render_column(column, True, has_fk=False))
@@ -317,6 +324,7 @@ class ModelTable(Model):
 
     def render(self):
         met = ' metadata,' if _flask_prepend == '' else ''
+
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name, _flask_prepend, met)
 
         for column in self.table.columns:
@@ -586,6 +594,7 @@ class ManyToManyRelationship(Relationship):
 class CodeGenerator(object):
     header = '# coding: utf-8'
     footer = ''
+    _table_map = {}
 
     def __init__(self, metadata, noindexes=False, noconstraints=False,
                  nojoined=False, noinflect=False, nobackrefs=False,
@@ -699,6 +708,117 @@ class CodeGenerator(object):
             self.collector.add_literal_import('sqlalchemy.ext.declarative', 'declarative_base')
             self.collector.add_literal_import('sqlalchemy', 'MetaData')
 
+    def gen_table_schemas(self):
+        """
+        找到所有包含外键的表， 识别并记录表中所有的字段类型。
+        :return:
+        """
+
+        """
+        json.dumps({
+            "tablename":{
+                "colums": {
+
+                },
+                "is_foreign": False,
+                "foreign_info": {
+                    "relation_table": "tablename.column_name"
+                }
+            }
+        })
+        """
+        for model in self.models:
+            _table = model.table
+            if isinstance(_table, Table) is False:
+                raise ValueError("%s database table error!" % _table.name)
+
+            has_fk = False
+            # print("tablename =", _table.name)
+
+            #存储表名
+            self._table_map[_table.name] = {}
+
+            column_dict     = {}
+            foreign_dict    = {}
+            column_names    = []
+
+            for col in _table.columns:
+                column_names.append(col.name)
+                if col.primary_key is True:
+                    column_dict[col.name] = {
+                        "col_type": str(col.type),
+                        "col_fullname": str(col),
+                        "desensi": False,
+                        "description": None,
+                        "primary_key": col.primary_key
+                    }
+                else:
+                    column_dict[col.name] = {
+                        "col_type": str(col.type),
+                        "col_fullname": str(col),
+                        "desensi": False,
+                        "description": None,
+                    }
+
+                # print "colname type =", col.type
+                # print "proxy_set    =", col.proxy_set
+                # print "defult col   =", str(col)
+                # print "is varchar   =", isinstance(col.type, sqlalchemy.String)
+                # print len(col.foreign_keys), col.foreign_keys
+
+                if len(col.foreign_keys) > 0:
+                   has_fk = True
+
+                if has_fk is True:
+                    """
+                    while len(col.foreign_keys) > 0:
+                        fk = col.foreign_keys.pop()
+                        kvcol["foreign_info"].update({str(fk.column).split(".")[0]: str(fk.column)})
+                        print fk.column
+                        print fk.target_fullname
+                        print str(fk.column)
+                    """
+                    for v in list(col.foreign_keys):
+                        foreign_dict.update({
+                            col.name: str(v.column)
+                        })
+
+            self._table_map[_table.name] = {
+                "column_names": column_names,
+                "column_info": column_dict,
+                "has_fk": has_fk,
+                "relationship": foreign_dict
+            }
+
+        return json.dumps(self._table_map)
+
+    def gen_table_socre(self):
+        _table_priority = []
+        if len(self._table_map) == 0:
+            raise ValueError("table schema can't be empty")
+
+        for v in self._table_map.keys():
+            _table_priority.append({
+                v: CodeGenerator.table_recursion(self._table_map, v)
+            })
+
+        return json.dumps(_table_priority)
+
+
+    @staticmethod
+    def table_recursion(table_shcema, name, n=0):
+        if table_shcema[name]["relationship"] == {}:
+            return n
+
+        rs = table_shcema[name]["relationship"].items()
+
+        ns = 0
+        for k, v in rs:
+            _name = v.split(".")[0]
+            c = abs(CodeGenerator.table_recursion(table_shcema, _name, n - 1))
+            ns += c
+        return ns
+
     def render(self, outfile=sys.stdout):
         print(self.header, file=outfile)
 
@@ -713,16 +833,20 @@ class CodeGenerator(object):
             else:
                 print('metadata = MetaData()', file=outfile)
 
+
         # Render the model tables and classes
         for model in self.models:
             print('\n\n', file=outfile)
             # print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
             print(model.render(), file=outfile)
-            print(model.render_no_relationship(), file=outfile)
+            print(model.render_no_relationship())
 
-
+        table_names = []
         for model in self.models:
-            print(repr(model.table))
+            table_names.append("t_{0}".format(model.table.name))
+
+
+        print("table_array = " + repr(table_names), file=outfile)
 
         if self.footer:
             print(self.footer, file=outfile)

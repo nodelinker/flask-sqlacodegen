@@ -8,9 +8,11 @@ import sys
 from sqlalchemy.engine import create_engine
 from sqlalchemy.schema import MetaData
 
-from sqlacodegen.codegen import CodeGenerator
-import sqlacodegen
-import sqlacodegen.dialects
+# from sqlacodegen.codegen import CodeGenerator
+# import sqlacodegen
+# import sqlacodegen.dialects
+from codegen import CodeGenerator
+import dialects
 
 
 def import_dialect_specificities(engine):
@@ -40,7 +42,6 @@ def main():
     args = parser.parse_args()
 
     if args.version:
-        print(sqlacodegen.version)
         return
     if not args.url:
         print('You must supply a url\n', file=sys.stderr)
@@ -58,6 +59,9 @@ def main():
                               args.nojoined, args.noinflect, args.nobackrefs,
                               args.flask, ignore_cols, args.noclasses)
     generator.render(outfile)
+
+    print(generator.gen_table_schemas())
+    print(generator.gen_table_socre())
 
 
 if __name__ == '__main__':
