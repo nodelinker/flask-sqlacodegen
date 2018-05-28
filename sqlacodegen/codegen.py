@@ -839,7 +839,7 @@ class CodeGenerator(object):
             print('\n\n', file=outfile)
             # print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
             print(model.render(), file=outfile)
-            print(model.render_no_relationship())
+            print(model.render_no_relationship(), file=outfile)
 
         table_names = []
         for model in self.models:
