@@ -603,7 +603,7 @@ class CodeGenerator(object):
 
     def __init__(self, metadata, noindexes=False, noconstraints=False,
                  nojoined=False, noinflect=False, nobackrefs=False,
-                 flask=False, ignore_cols=None, noclasses=False):
+                 flask=False, ignore_cols=None, noclasses=True):
         super(CodeGenerator, self).__init__()
 
         if noinflect:
