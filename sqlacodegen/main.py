@@ -39,6 +39,8 @@ def main():
     parser.add_argument('--nobackrefs', action='store_true', help="don't include backrefs")
     parser.add_argument('--flask', action='store_true', help="use Flask-SQLAlchemy columns")
     parser.add_argument('--ignore-cols', help="Don't check foreign key constraints on specified columns (comma-separated)")
+    parser.add_argument('--clone-table', action='store_true',
+                        help="clone table don't have any foreign key")
     args = parser.parse_args()
 
     if args.version:
@@ -55,12 +57,14 @@ def main():
     ignore_cols = args.ignore_cols.split(',') if args.ignore_cols else None
     metadata.reflect(engine, args.schema, not args.noviews, tables)
     outfile = codecs.open(args.outfile, 'w', encoding='utf-8') if args.outfile else sys.stdout
+
+
     generator = CodeGenerator(metadata, args.noindexes, args.noconstraints,
                               args.nojoined, args.noinflect, args.nobackrefs,
-                              args.flask, ignore_cols, args.noclasses)
+                              args.flask, ignore_cols, args.noclasses, args.clone_table)
     generator.render(outfile)
 
-    print(generator.gen_table_schemas())
+    print(generator.get_table_schemas())
     print(generator.gen_table_socre())
 
 

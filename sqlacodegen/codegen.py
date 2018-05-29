@@ -600,11 +600,14 @@ class CodeGenerator(object):
     header = '# coding: utf-8'
     footer = ''
     _table_map = {}
+    table_clone = False
 
     def __init__(self, metadata, noindexes=False, noconstraints=False,
                  nojoined=False, noinflect=False, nobackrefs=False,
-                 flask=False, ignore_cols=None, noclasses=True):
+                 flask=False, ignore_cols=None, noclasses=True, table_clone=False):
         super(CodeGenerator, self).__init__()
+
+        self.table_clone = table_clone
 
         if noinflect:
             inflect_engine = _DummyInflectEngine()
@@ -795,6 +798,7 @@ class CodeGenerator(object):
                 "relationship": foreign_dict
             }
 
+    def get_table_schemas(self):
         return json.dumps(self._table_map)
 
     def gen_table_socre(self):
@@ -848,9 +852,12 @@ class CodeGenerator(object):
             # print(model.render().rstrip('\n').encode('utf-8'), file=outfile)
             print(model.render(), file=outfile)
 
-        #Render the model tables no clone table
-        for model in self.models:
-            print(model.render_no_relationship(), file=outfile)
+        if self.table_clone is True:
+            #Render the model tables no clone table
+            for model in self.models:
+                print(model.render_no_relationship(), file=outfile)
+
+        self.gen_table_schemas()
 
         table_names = []
         for model in self.models:
