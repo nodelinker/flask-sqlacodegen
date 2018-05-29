@@ -808,14 +808,14 @@ class CodeGenerator(object):
 
         for v in self._table_map.keys():
             _table_priority.append({
-                v: CodeGenerator.table_recursion(self._table_map, v)
+                v: CodeGenerator.table_recursion(self._table_map,v, v)
             })
 
         return json.dumps(_table_priority)
 
 
     @staticmethod
-    def table_recursion(table_schema, name, n=0):
+    def table_recursion(table_schema, parent_name, name, n=0):
         if table_schema[name]["relationship"] == {}:
             return n
 
@@ -827,7 +827,12 @@ class CodeGenerator(object):
             if _name == name:
                 ns += 1
                 continue
-            c = abs(CodeGenerator.table_recursion(table_schema, _name, n - 1))
+
+            if parent_name == _name:
+                ns += 1
+                continue
+
+            c = abs(CodeGenerator.table_recursion(table_schema, name, _name, n - 1))
             ns += c
         return ns
 
