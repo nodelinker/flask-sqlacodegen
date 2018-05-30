@@ -65,6 +65,7 @@ def main():
     generator.render(outfile)
 
     print(generator.get_table_schemas())
+    print(generator.get_table_backref())
     print(generator.gen_table_socre())
 
 

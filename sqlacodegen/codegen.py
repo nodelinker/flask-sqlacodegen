@@ -600,6 +600,7 @@ class CodeGenerator(object):
     header = '# coding: utf-8'
     footer = ''
     _table_map = {}
+    _backref_inf = {}
     table_clone = False
 
     def __init__(self, metadata, noindexes=False, noconstraints=False,
@@ -801,6 +802,9 @@ class CodeGenerator(object):
     def get_table_schemas(self):
         return json.dumps(self._table_map)
 
+    def get_table_backref(self):
+        return json.dumps(self._backref_inf)
+
     def gen_table_socre(self):
         _table_priority = []
         if len(self._table_map) == 0:
@@ -808,7 +812,7 @@ class CodeGenerator(object):
 
         for v in self._table_map.keys():
             _table_priority.append({
-                v: CodeGenerator.table_recursion(self._table_map,v, v)
+                v: CodeGenerator.table_recursion(self._table_map, v, v)
             })
 
         return json.dumps(_table_priority)
@@ -835,6 +839,7 @@ class CodeGenerator(object):
             c = abs(CodeGenerator.table_recursion(table_schema, name, _name, n - 1))
             ns += c
         return ns
+
 
     def render(self, outfile=sys.stdout):
         print(self.header, file=outfile)
@@ -863,6 +868,20 @@ class CodeGenerator(object):
                 print(model.render_no_relationship(), file=outfile)
 
         self.gen_table_schemas()
+
+        for model in self.models:
+            _table = model.table
+            for col in _table.c:
+                if len(col.foreign_keys) > 0:
+                    _tp = []
+                    for fk in col.foreign_keys:
+                        _tp.append(str(col))
+
+                    fk_col_name = str(fk.column)
+                    if fk_col_name in self._backref_inf.keys():
+                        self._backref_inf[fk_col_name].extend(_tp)
+                    else:
+                        self._backref_inf[fk_col_name] = _tp
 
         table_names = []
         for model in self.models:
