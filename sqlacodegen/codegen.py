@@ -723,6 +723,7 @@ class CodeGenerator(object):
         :return:
         """
 
+        increment_col_name = lambda a: a.name if a is not None else None
         """
         json.dumps({
             "tablename":{
@@ -793,6 +794,7 @@ class CodeGenerator(object):
                         })
 
             self._table_map[_table.name] = {
+                "autoincrement": increment_col_name(_table._autoincrement_column),
                 "column_names": column_names,
                 "column_info": column_dict,
                 "has_fk": has_fk,
