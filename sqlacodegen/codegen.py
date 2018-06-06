@@ -288,8 +288,10 @@ class Model(object):
 
 class ModelTable(Model):
 
-    suffix = "_clone"
-    _has_clone = []
+    def __init__(self, table, clone_suffix):
+        super(ModelTable, self).__init__(table)
+        self.suffix = clone_suffix
+        self.is_clone = False
 
     def add_imports(self, collector):
         super(ModelTable, self).add_imports(collector)
@@ -298,9 +300,10 @@ class ModelTable(Model):
     def render_no_relationship(self):
         met = ' metadata,' if _flask_prepend == '' else ''
 
-        # print(str(self.table.name), self.table.name.endswith(self.suffix))
-        if str(self.table.name).endswith(self.suffix) is True \
-                or str(self.table.name) in self._has_clone:
+        # if str(self.table.name).endswith(self.suffix) is True \
+        #         or str(self.table.name) in self._has_clone:
+        #     return "#"
+        if self.is_clone == True:
             return "#"
 
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name + self.suffix, _flask_prepend, met)
@@ -327,8 +330,10 @@ class ModelTable(Model):
     def render(self):
         met = ' metadata,' if _flask_prepend == '' else ''
 
+        # if str(self.table.name).endswith(self.suffix) is True:
+        #     self._has_clone.append(str(self.table.name)[:-len(self.suffix)])
         if str(self.table.name).endswith(self.suffix) is True:
-            self._has_clone.append(str(self.table.name)[:-len(self.suffix)])
+            self.is_clone = True
 
         text = 't_{0} = {1}Table(\n    {0!r},{2}\n'.format(self.table.name, _flask_prepend, met)
 
@@ -605,7 +610,7 @@ class CodeGenerator(object):
 
     def __init__(self, metadata, noindexes=False, noconstraints=False,
                  nojoined=False, noinflect=False, nobackrefs=False,
-                 flask=False, ignore_cols=None, noclasses=True, table_clone=False):
+                 flask=False, ignore_cols=None, noclasses=True, table_clone=False, clonesuffix="_zx01_clone"):
         super(CodeGenerator, self).__init__()
 
         self.table_clone = table_clone
@@ -681,7 +686,7 @@ class CodeGenerator(object):
 
             # Only form model classes for tables that have a primary key and are not association tables
             if not table.primary_key or table.name in association_tables or noclasses:
-                model = ModelTable(table)
+                model = ModelTable(table, clonesuffix)
             elif not noclasses:
                 model = ModelClass(table, links[table.name], inflect_engine, not nojoined)
                 classes[model.name] = model
@@ -869,6 +874,21 @@ class CodeGenerator(object):
             for model in self.models:
                 print(model.render_no_relationship(), file=outfile)
 
+        table_names = []
+        for model in self.models:
+            if model.is_clone == False:
+                table_names.append("t_{0}".format(model.table.name))
+        print("table_array = " + str(repr(table_names)).replace("'", ""), file=outfile)
+
+        clone_table_names = []
+        for model in self.models:
+            if model.is_clone == False:
+                clone_table_names.append("t_{0}".format(model.table.name) + model.suffix)
+        print("table_array_clone = " + str(repr(clone_table_names)).replace("'", ""), file=outfile)
+
+        if self.footer:
+            print(self.footer, file=outfile)
+
         self.gen_table_schemas()
 
         for model in self.models:
@@ -884,13 +904,3 @@ class CodeGenerator(object):
                         self._backref_inf[fk_col_name].extend(_tp)
                     else:
                         self._backref_inf[fk_col_name] = _tp
-
-        table_names = []
-        for model in self.models:
-            table_names.append("t_{0}".format(model.table.name))
-
-
-        print("table_array = " + str(repr(table_names)).replace("'", ""), file=outfile)
-
-        if self.footer:
-            print(self.footer, file=outfile)
